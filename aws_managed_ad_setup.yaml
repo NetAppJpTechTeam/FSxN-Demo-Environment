@@ -1,0 +1,289 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Join the Amazon Managed AD using SSM.
+
+Metadata:
+  Authors:
+    Description: Shengyu Fang　(shengyu.fang@netapp.com)
+  Reference 1:
+    Description:
+      - https://awstut.com/en/2021/12/11/accessing-a-windows-instance-via-ssm-session-manager/
+      - by awstut
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Join windows instance to Amazoon managed AD using SSM.
+      Parameters:
+        - VpcCidr
+        - AvailabilityZones
+        - InstanceType
+        - KeyPair
+        - LatestWindowsAmiId
+        - DirectoryPassword
+    ParameterLabels:
+      AvailabilityZones:
+        default: Availability Zones
+      InstanceType:
+        default: Instance Type
+      KeyPair:
+        default: Key Pair
+      VpcCidr:
+        default: VPC CIDR
+      LatestWindowsAmiId:
+        default: Latest Windows AMI ID
+      DirectoryPassword:
+        default: Your Test MS Directory Password
+
+Parameters:
+  AvailabilityZones:
+    Description: Select two 2 Availability Zones (AZ).
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+  InstanceType:
+    Description: Select the instance type.
+    AllowedValues:
+    - t2.micro
+    - m5.large
+    - c5n.xlarge
+    - c5n.2xlarge
+    - c5n.9xlarge
+    - c5n.18xlarge
+    - r5n.8xlarge
+    - r5n.16xlarge
+    - r5n.24xlarge
+    Default: t2.micro
+    Type: String
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+  VpcCidr:
+    AllowedValues:
+    - 10.0.0.0/16
+    - 173.31.0.0/16
+    - 192.168.0.0/16
+    Default: 10.0.0.0/16
+    Description: Select the private IPv4 CIDR for the VPC.
+    Type: String
+  LatestWindowsAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base'
+  DirectoryPassword:
+    NoEcho: true
+    Description: The password for your MS Directory Admin.
+    Type: String
+
+
+Resources:
+  # Network Environment
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'VPC IGW | ', !Ref 'AWS::StackName' ] ]
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Route Table | ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref Vpc
+
+  PublicRouteTableAssociation0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet0
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt Vpc.CidrBlock, 2, 8 ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Subnet 0 | ', !Ref 'AWS::StackName' ] ]
+        - Key: SubnetType
+          Value: Public
+      VpcId: !Ref Vpc
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt Vpc.CidrBlock, 2, 8 ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Subnet 1 | ', !Ref 'AWS::StackName' ] ]
+        - Key: SubnetType
+          Value: Public
+      VpcId: !Ref Vpc
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'VPC | ', !Ref 'AWS::StackName' ] ]
+
+  #Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for your AD_Join test environment
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: "AD_Join Test Environment security group"
+      VpcId:
+        !Ref Vpc
+
+  SecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SecurityGroup
+
+  #AWS Managed Microsoft AD
+  MSDirectory:
+    Type: AWS::DirectoryService::MicrosoftAD
+    Properties:
+      Edition: Standard
+      Name: example.com
+      Password: !Ref DirectoryPassword
+      VpcSettings:
+        SubnetIds:
+          - !Ref PublicSubnet0
+          - !Ref PublicSubnet1
+        VpcId:
+          !Ref Vpc
+
+  #DHCP Setting
+  DhcpOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: example.com
+      DomainNameServers: !GetAtt MSDirectory.DnsIpAddresses
+  DhcpOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      DhcpOptionsId: !Ref DhcpOptions
+      VpcId: !Ref Vpc
+
+  #The Windows OS Instance
+  WindowsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !Ref LatestWindowsAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      Monitoring: true
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      SubnetId: !Ref PublicSubnet0
+      Tags:
+        - Key: Name
+          Value: AD_Join test Windows Instance
+
+  # Instance Role Setting
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref InstanceRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      - arn:aws:iam::aws:policy/AmazonFSxFullAccess
+      - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+      - arn:aws:iam::aws:policy/IAMFullAccess
+      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      - arn:aws:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+      Path: "/"
+
+  AWSJoinDirectoryServiceDomainAssociation:
+    Type: AWS::SSM::Association
+    DependsOn:
+          - WindowsInstance
+          - MSDirectory
+    Properties:
+      AssociationName: "example-aws-join-directory-service-domain-association"
+      Name: AWS-JoinDirectoryServiceDomain
+      Parameters:
+        directoryId:
+          - !Ref MSDirectory
+        directoryName:
+          - example.com
+        directoryOU:
+          - OU=Computers,OU=example,DC=example,DC=com
+        dnsIpAddresses:
+          - !Select [0, !GetAtt MSDirectory.DnsIpAddresses]
+          - !Select [1, !GetAtt MSDirectory.DnsIpAddresses]
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref WindowsInstance
+      WaitForSuccessTimeoutSeconds: 3000
+
+Outputs:
+  DirectoryID:
+    Description: ID of the Microsoft Active Directory
+    Value: !Ref MSDirectory
+  DirectoryAdminAccount:
+    Description: Admin account of the Microsoft Active Directory
+    Value: admin@example.com
+  DomainName:
+    Description: DomainName of the Microsoft Active Directory
+    Value: example.com
+  WindowsInstancePublicIp:
+    Description: Windows Server Public IP
+    Value: !GetAtt WindowsInstance.PublicIp

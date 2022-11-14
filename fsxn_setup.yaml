@@ -1,0 +1,241 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates the Amazon FSx for NetApp ONTAP test environment.
+
+Metadata:
+  Authors:
+    Description: Shengyu Fang　(shengyu.fang@netapp.com)
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Amazon FSx for NetApp ONTAP Environment
+      Parameters:
+        - VpcCidr
+        - AvailabilityZones
+        - DeploymentType
+        - ThroughputCapacity
+        - StorageCapacity
+        - EnvironmentPassword
+    ParameterLabels:
+      VpcCidr:
+        default: VPC CIDR
+      AvailabilityZones:
+        default: Availability Zones
+      DeploymentType:
+        default: File System Deployment Type (MULTI_AZ or SINGLE_AZ)
+      ThroughputCapacity:
+        default: File System Throughput Capacity
+      StorageCapacity:
+        default: File System Storage Capacity
+      EnvironmentPassword:
+        default: Your Test Environment Unify Password
+
+Parameters:
+  VpcCidr:
+    AllowedValues:
+    - 10.0.0.0/16
+    - 173.31.0.0/16
+    - 192.168.0.0/16
+    Default: 10.0.0.0/16
+    Description: Select the private IPv4 CIDR for the VPC.
+    Type: String
+  AvailabilityZones:
+    Description: Select two 2 Availability Zones (AZ).
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+  DeploymentType:
+    AllowedValues:
+    - SINGLE_AZ_1
+    - MULTI_AZ_1
+    Default: SINGLE_AZ_1
+    Type: String
+  ThroughputCapacity:
+    Description: Select Storage Throughput from 128, 256, 512, 1024, and 2048 MB/s.
+    AllowedValues:
+    - 128
+    - 256
+    - 512
+    - 1024
+    - 2048
+    Default: 128
+    Type: Number
+  StorageCapacity:
+    Description: Specify a Storage Capacity between 1024 to 196608.
+    Default: 1024
+    Type: Number
+  EnvironmentPassword:
+    NoEcho: true
+    Description: The password for your FSx for NetApp ONTAP and MS Directory Admin.Must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
+    Type: String
+    MinLength: 8
+    AllowedPattern: ^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$
+    ConstraintDescription: Your environment password must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
+
+Conditions:
+  IsSingleAZ: !Equals
+    - !Ref DeploymentType
+    - "SINGLE_AZ_1"
+  IsMultiAZ: !Equals
+    - !Ref DeploymentType
+    - "MULTI_AZ_1"
+
+Resources:
+  # Network Environment
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'VPC IGW | ', !Ref 'AWS::StackName' ] ]
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Route Table | ', !Ref 'AWS::StackName' ] ]
+        - Key: Network
+          Value: Public
+      VpcId: !Ref Vpc
+
+  PublicRouteTableAssociation0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet0
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt Vpc.CidrBlock, 2, 8 ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Subnet 0 | ', !Ref 'AWS::StackName' ] ]
+        - Key: SubnetType
+          Value: Public
+      VpcId: !Ref Vpc
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt Vpc.CidrBlock, 2, 8 ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'Public Subnet 1 | ', !Ref 'AWS::StackName' ] ]
+        - Key: SubnetType
+          Value: Public
+      VpcId: !Ref Vpc
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Join [ '', [ 'VPC | ', !Ref 'AWS::StackName' ] ]
+
+  #Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Amazon FSx for NetApp ONTAP Workshop Environment
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: "Amazon FSx for  NetApp ONTAP Test Environment security group"
+      VpcId:
+        !Ref Vpc
+
+  SecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SecurityGroup
+
+  #FSx for NetApp ONTAP Setting
+  FileSystem:
+    Type: "AWS::FSx::FileSystem"
+    Properties:
+      FileSystemType: "ONTAP"
+      StorageCapacity: !Ref StorageCapacity
+      SubnetIds: !If
+        - IsSingleAZ
+        - - !Ref PublicSubnet0
+        - - !Ref PublicSubnet0
+          - !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      OntapConfiguration:
+        FsxAdminPassword: !Ref EnvironmentPassword
+        DeploymentType: !Ref DeploymentType
+        ThroughputCapacity: !Ref ThroughputCapacity
+        PreferredSubnetId: !If
+          - IsMultiAZ
+          - !Ref PublicSubnet0
+          - !Ref AWS::NoValue
+
+  #FSx for NetApp ONTAP SVM (No AD)
+  SVM0:
+    DependsOn: FileSystem
+    Type: "AWS::FSx::StorageVirtualMachine"
+    Properties:
+      FileSystemId: !Ref FileSystem
+      Name: SVM0
+
+  #The Volume Under FSx for NetApp ONTAP SVM (No AD)
+  Volume1:
+    DependsOn: SVM0
+    Type: "AWS::FSx::Volume"
+    Properties:
+      Name: vol1
+      VolumeType: "ONTAP"
+      OntapConfiguration:
+        JunctionPath: /vol1
+        SizeInMegabytes: 10240
+        StorageEfficiencyEnabled: true
+        StorageVirtualMachineId: !Ref SVM0
+
+Outputs:
+  FileSystemID:
+    Description: ID of the FSx for NetApp ONTAP
+    Value: !Ref FileSystem
+  FileSystemUser:
+    Description: Admin account of the FSx for NetApp ONTAP
+    Value: fsxadmin
+  FileSystemPassword:
+    Description: Admin password of the FSx for NetApp ONTAP
+    Value: Your Test Environment Unify Password
