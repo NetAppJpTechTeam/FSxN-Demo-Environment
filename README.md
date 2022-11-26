@@ -1,5 +1,6 @@
 # FSxN-Demo-Environment
-Using CloudFormation to create Demo Environment of FSxN on the AWS
+Using CloudFormation to create Demo Environment of FSxN on the AWS.
+
 The main template is fsxn_demo_environment_initial.yaml.
 # Architecture
 The architecture is following：
