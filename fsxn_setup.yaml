@@ -6,6 +6,10 @@ Description: Creates the Amazon FSx for NetApp ONTAP test environment.
 Metadata:
   Authors:
     Description: Shengyu Fang　(shengyu.fang@netapp.com)
+  Reference:
+    Description:
+      - https://www.youtube.com/watch?v=a_EqgdKfa2M
+      - by Nick Howell (nick.howell@netapp.com)
   AWS::CloudFormation::Interface:
     ParameterGroups:
     - Label:
