@@ -20,7 +20,7 @@ Metadata:
         - DeploymentType
         - ThroughputCapacity
         - StorageCapacity
-        - EnvironmentPassword
+        - FileSystemPassword
     ParameterLabels:
       VpcCidr:
         default: VPC CIDR
@@ -32,7 +32,7 @@ Metadata:
         default: File System Throughput Capacity
       StorageCapacity:
         default: File System Storage Capacity
-      EnvironmentPassword:
+      FileSystemPassword:
         default: Your Test Environment Unify Password
 
 Parameters:
@@ -67,13 +67,13 @@ Parameters:
     Description: Specify a Storage Capacity between 1024 to 196608.
     Default: 1024
     Type: Number
-  EnvironmentPassword:
+  FileSystemPassword:
     NoEcho: true
-    Description: The password for your FSx for NetApp ONTAP and MS Directory Admin.Must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
+    Description: The password for your FSx for NetApp ONTAP. Must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
     Type: String
     MinLength: 8
     AllowedPattern: ^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$
-    ConstraintDescription: Your environment password must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
+    ConstraintDescription: Your FSx for NetApp ONTAP password must contain at least 8 characters in the allowed pattern ("^[^\u0000\u0085\u2028\u2029\r\n]{8,50}$").
 
 Conditions:
   IsSingleAZ: !Equals
@@ -204,7 +204,7 @@ Resources:
       SecurityGroupIds:
         - !Ref SecurityGroup
       OntapConfiguration:
-        FsxAdminPassword: !Ref EnvironmentPassword
+        FsxAdminPassword: !Ref FileSystemPassword
         DeploymentType: !Ref DeploymentType
         ThroughputCapacity: !Ref ThroughputCapacity
         PreferredSubnetId: !If
@@ -242,4 +242,4 @@ Outputs:
     Value: fsxadmin
   FileSystemPassword:
     Description: Admin password of the FSx for NetApp ONTAP
-    Value: Your Test Environment Unify Password
+    Value: Your fsxadmin Password
