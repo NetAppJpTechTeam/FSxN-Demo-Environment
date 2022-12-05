@@ -1,0 +1,73 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Join the Amazon Managed AD using SSM.
+
+Metadata:
+  Authors:
+    Description: Shengyu Fang　(shengyu.fang@netapp.com)
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Launching language selectable windows Instance.
+      Parameters:
+        - InsyanceName
+        - InstanceType
+        - KeyPair
+        - SubnetId
+        - SecurityGroupID
+    ParameterLabels:
+      InstanceName:
+        default: Instance Name
+      InstanceType:
+        default: Instance Type
+      KeyPair:
+        default: Key Pair
+      SubnetId:
+        default: Subnet ID
+      SecurityGroupId:
+        default: Security Group ID
+
+Parameters:
+  InstanceName:
+    Description: Input your instance name.
+    Type: String
+  InstanceType:
+    Description: Select the instance type.
+    AllowedValues:
+    - t2.micro
+    - m5.large
+    - c5n.xlarge
+    - c5n.2xlarge
+    - c5n.9xlarge
+    - c5n.18xlarge
+    - r5n.8xlarge
+    - r5n.16xlarge
+    - r5n.24xlarge
+    Default: t2.micro
+    Type: String
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+
+Resources:
+  WindowsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0610a81d45d7c9b1a
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      Monitoring: true
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: "true"
+        DeviceIndex: "0"
+        GroupSet:
+          - !Ref SecurityGroupId
+        SubnetId: !Ref SubnetId
