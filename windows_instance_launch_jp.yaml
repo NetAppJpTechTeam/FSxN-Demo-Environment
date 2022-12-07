@@ -1,7 +1,7 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-Description: Join the Amazon Managed AD using SSM.
+Description: Deploying a Japanese-language Windows Instance.
 
 Metadata:
   Authors:
@@ -9,7 +9,7 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
     - Label:
-        default: Launching language selectable windows Instance.
+        default: Deploying a Japanese-language Windows Instance.
       Parameters:
         - InsyanceName
         - InstanceType
